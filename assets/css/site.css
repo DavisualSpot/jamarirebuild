@@ -814,3 +814,22 @@ footer .social { display: flex; gap: 4px; margin-right: -10px; }
 footer .social a { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; margin: 0; color: var(--ivory); border-radius: 50%; transition: background .2s, color .2s; }
 footer .social a:hover { background: rgba(250, 245, 234, .12); color: #fff; }
 footer .social svg { width: 20px; height: 20px; }
+
+/* floating WhatsApp button (bottom right) */
+.wa-float { position: fixed; z-index: 45; right: max(20px, env(safe-area-inset-right)); bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+  display: flex; align-items: center; justify-content: center; width: 58px; height: 58px; border-radius: 50%;
+  background: var(--green); color: var(--ivory); text-decoration: none; box-shadow: 0 6px 20px rgba(36, 26, 18, .22), 0 1px 3px rgba(36, 26, 18, .2);
+  transition: transform .25s ease, box-shadow .25s ease, bottom .25s ease; }
+.wa-float svg { width: 28px; height: 28px; }
+.wa-float:hover { transform: translateY(-2px); box-shadow: 0 10px 26px rgba(36, 26, 18, .28), 0 1px 3px rgba(36, 26, 18, .2); }
+.wa-float:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; }
+.wa-tip { position: absolute; right: calc(100% + 12px); white-space: nowrap; padding: 9px 14px; border-radius: 2px; background: var(--ink); color: var(--ivory);
+  font-size: 14px; font-weight: 600; opacity: 0; transform: translateX(6px); pointer-events: none; transition: opacity .2s, transform .2s; }
+.wa-float:hover .wa-tip, .wa-float:focus-visible .wa-tip { opacity: 1; transform: none; }
+body[data-page="team"] .wa-float { display: none; }
+@media (max-width: 700px) {
+  .wa-float { width: 54px; height: 54px; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); }
+  .wa-tip { display: none; }
+  .sticky:not(.away) ~ .wa-float { bottom: calc(env(safe-area-inset-bottom, 0px) + 88px); }
+}
+@media (prefers-reduced-motion: reduce) { .wa-float, .wa-tip { transition: none; } }
