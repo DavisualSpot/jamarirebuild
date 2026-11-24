@@ -7,7 +7,7 @@ window.JAMARI_RESIDENCES = [
     "kind": "penthouse",
     "beds": 2,
     "guests": 4,
-    "photo": "p101"
+    "photo": "jamari-penthouse-bedroom-lekki-phase-1"
   },
   {
     "slug": "penthouse-102",
@@ -16,7 +16,7 @@ window.JAMARI_RESIDENCES = [
     "kind": "penthouse",
     "beds": 2,
     "guests": 4,
-    "photo": "p102"
+    "photo": "jamari-penthouse-bedroom-terrace-doors"
   },
   {
     "slug": "apartment-101",
@@ -25,7 +25,7 @@ window.JAMARI_RESIDENCES = [
     "kind": "apartment",
     "beds": 3,
     "guests": 6,
-    "photo": "h101"
+    "photo": "jamari-apartment-living-room-lekki-phase-1"
   },
   {
     "slug": "apartment-102",
@@ -34,7 +34,7 @@ window.JAMARI_RESIDENCES = [
     "kind": "apartment",
     "beds": 3,
     "guests": 6,
-    "photo": "h102"
+    "photo": "jamari-apartment-dining-room"
   },
   {
     "slug": "apartment-103",
@@ -43,7 +43,7 @@ window.JAMARI_RESIDENCES = [
     "kind": "apartment",
     "beds": 3,
     "guests": 6,
-    "photo": "a3"
+    "photo": "jamari-apartment-bedroom-wall-tv"
   },
   {
     "slug": "apartment-104",
@@ -52,7 +52,7 @@ window.JAMARI_RESIDENCES = [
     "kind": "apartment",
     "beds": 3,
     "guests": 6,
-    "photo": "a4"
+    "photo": "jamari-apartment-main-bedroom"
   }
 ];
 window.JAMARI_SIZES = [
@@ -60,21 +60,21 @@ window.JAMARI_SIZES = [
     "beds": 1,
     "price": 150000,
     "guests": 2,
-    "photo": "p101b",
+    "photo": "jamari-penthouse-bedroom-dressing-table",
     "where": "In a penthouse or an apartment. The other bedrooms stay locked, just for you."
   },
   {
     "beds": 2,
     "price": 250000,
     "guests": 4,
-    "photo": "p102",
+    "photo": "jamari-penthouse-bedroom-terrace-doors",
     "where": "Usually a penthouse, with a terrace. Two en-suite bedrooms."
   },
   {
     "beds": 3,
     "price": 300000,
     "guests": 6,
-    "photo": "h101",
+    "photo": "jamari-apartment-living-room-lekki-phase-1",
     "where": "One of our four apartments. Room for families and groups."
   }
 ];
@@ -83,7 +83,7 @@ window.JAMARI_TYPES = [
     "slug": "penthouse",
     "name": "Penthouse",
     "maxBeds": 2,
-    "photo": "p101",
+    "photo": "jamari-penthouse-bedroom-lekki-phase-1",
     "where": "Two en-suite bedrooms and a terrace. Book both, or just one.",
     "url": "penthouse.html"
   },
@@ -91,7 +91,7 @@ window.JAMARI_TYPES = [
     "slug": "apartment",
     "name": "Apartment",
     "maxBeds": 3,
-    "photo": "h101",
+    "photo": "jamari-apartment-living-room-lekki-phase-1",
     "where": "Three en-suite bedrooms, room for families and groups. Book all three, or fewer.",
     "url": "apartment.html"
   }
