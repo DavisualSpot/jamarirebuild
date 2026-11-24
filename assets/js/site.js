@@ -1,6 +1,6 @@
 /* Jamari Residences: shared site script.
    Mobile menu · sticky booking bar · residence previews · demo forms ·
-   date + guest pickers · the four booking steps (demo: no payment is taken). */
+   date + guest pickers with a bedrooms switch · the four booking steps (demo: no payment is taken). */
 (function () {
   'use strict';
 
@@ -24,14 +24,15 @@
   function findRes(slug) { for (var i = 0; i < RES.length; i++) if (RES[i].slug === slug) return RES[i]; return null; }
   function readStay() {
     var p = new URLSearchParams(location.search);
-    return { ci: p.get('checkin') || '', co: p.get('checkout') || '', g: parseInt(p.get('guests'), 10) || 0, room: p.get('room') || '' };
+    return { ci: p.get('checkin') || '', co: p.get('checkout') || '', g: parseInt(p.get('guests'), 10) || 0, b: parseInt(p.get('bedrooms'), 10) || 0, t: p.get('type') || '' };
   }
   function stayQuery(o) {
     var p = new URLSearchParams();
     if (o.ci) p.set('checkin', o.ci);
     if (o.co) p.set('checkout', o.co);
     if (o.g) p.set('guests', o.g);
-    if (o.room) p.set('room', o.room);
+    if (o.t) p.set('type', o.t);
+    if (o.b) p.set('bedrooms', o.b);
     return p.toString();
   }
   function datesOk(o) { return !!(o.ci && o.co && o.co > o.ci && o.ci >= TODAY && o.g > 0); }
@@ -168,6 +169,44 @@
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !menu.hidden) setMenu(false); });
   }
 
+  // ---------------------------------------------------------------- top bar: hides while you read down, comes back when you scroll up
+  (function () {
+    var bar = document.querySelector('.topbar'), float = false;
+    var heroNav = !bar && document.querySelector('.band .nav');
+    if (heroNav) {  // home and photo-led pages: a light copy of the nav that slides in once the photo is gone
+      float = true;
+      bar = document.createElement('header'); bar.className = 'topbar float';
+      var w = document.createElement('div'); w.className = 'wrap'; bar.appendChild(w);
+      var nav = heroNav.cloneNode(true); nav.removeAttribute('id'); w.appendChild(nav);
+      var wm = nav.querySelector('.wm'); if (wm) wm.style.setProperty('--wm', 'var(--green)');
+      var mb = nav.querySelector('.menu-btn'); if (mb && openBtn) mb.addEventListener('click', function () { openBtn.click(); });
+      bar.inert = true;
+      document.body.insertBefore(bar, document.body.firstChild);
+    }
+    if (!bar) return;
+    var lastY = window.scrollY, ticking = false, hero = heroNav ? heroNav.closest('.band') : null;
+    function update() {
+      ticking = false;
+      var y = window.scrollY, d = y - lastY;
+      if (Math.abs(d) < 6) return;
+      var up = d < 0;
+      if (float) {
+        var show = up && y > (hero ? hero.offsetHeight * 0.7 : 400);
+        bar.classList.toggle('up', show); bar.inert = !show;
+      } else if (y < bar.offsetHeight + 40) { bar.classList.remove('away', 'up'); }
+      else { bar.classList.toggle('away', !up); bar.classList.toggle('up', up); }
+      lastY = y;
+    }
+    window.addEventListener('scroll', function () { if (!ticking) { ticking = true; requestAnimationFrame(update); } }, { passive: true });
+  })();
+
+  // ---------------------------------------------------------------- content eases in as it scrolls into view (off for reduced motion)
+  if ('IntersectionObserver' in window && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+    var io = new IntersectionObserver(function (es) { es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }); }, { rootMargin: '0px 0px -8% 0px' });
+    document.querySelectorAll('.sec-head, .res-row, .card, .rooms, .intro .grid, .faq-group, .legal-row, .room-body, .more-photos, .inc .grid, .pair, .reviews .wrap, .next-steps, .team-stats, .pick-list')
+      .forEach(function (el) { if (el.getBoundingClientRect().top > window.innerHeight) { el.classList.add('rv'); io.observe(el); } });
+  }
+
   // ---------------------------------------------------------------- sticky booking bar (phones)
   var sticky = document.querySelector('.sticky'), anchor = document.getElementById('book');
   if (sticky && anchor && 'IntersectionObserver' in window) {
@@ -205,35 +244,73 @@
     });
   });
 
+  // ---------------------------------------------------------------- booking by bedrooms (DEMO availability)
+  // Guests book 1, 2 or 3 bedrooms; the residence is assigned at payment, smallest fit first
+  // (penthouses take 1–2 bedroom stays first, so the 3-bedroom apartments stay free for groups).
+  // Availability below is SAMPLE data, counted in nights from today, so the calendar always shows some booked nights.
+  var SIZES = window.JAMARI_SIZES || [], TYPES = window.JAMARI_TYPES || [];
+  function typeOf(t) { for (var i = 0; i < TYPES.length; i++) if (TYPES[i].slug === t) return TYPES[i]; return null; }
+  function needBeds(g) { for (var i = 0; i < SIZES.length; i++) if (SIZES[i].guests >= g) return SIZES[i].beds; return 99; }
+  function stayName(T, b) { return T.name + ' · ' + bedWord(b); }
+  function sizeOf(b) { for (var i = 0; i < SIZES.length; i++) if (SIZES[i].beds === b) return SIZES[i]; return null; }
+  function bedWord(b) { return b + (b === 1 ? ' bedroom' : ' bedrooms'); }
+  var DEMO_BUSY = { 'penthouse-101': [[5, 8], [20, 23]], 'penthouse-102': [[5, 9], [12, 14]], 'apartment-101': [[6, 8], [12, 15]],
+    'apartment-102': [[5, 8], [12, 15], [30, 33]], 'apartment-103': [[6, 8], [12, 15], [21, 24]], 'apartment-104': [[5, 9], [12, 14], [20, 23]] };
+  function offset(v) { return Math.round((day(v) - day(TODAY)) / 86400000); }
+  function busy(slug, v) { var o = offset(v), a = DEMO_BUSY[slug] || []; for (var i = 0; i < a.length; i++) if (o >= a[i][0] && o < a[i][1]) return true; return false; }
+  function fitting(b, t) { return RES.filter(function (r) { return r.beds >= (b || 1) && (!t || r.kind === t); }).sort(function (x, y) { return x.beds - y.beds; }); }
+  function nightOpen(b, v, t) { return fitting(b, t).some(function (r) { return !busy(r.slug, v); }); }
+  function assign(b, ci, co, t) {  // smallest free unit of that type for every night, or null
+    var list = fitting(b, t);
+    for (var i = 0; i < list.length; i++) {
+      var ok = true;
+      for (var v = ci; v < co; v = plusDays(v, 1)) if (busy(list[i].slug, v)) { ok = false; break; }
+      if (ok) return list[i];
+    }
+    return null;
+  }
+
   // ---------------------------------------------------------------- booking line: brand date + guest pickers
   function initBooking(form) {
     var q = function (s) { return form.querySelector(s); };
     var btn = q('.cta'), hint = q('.hint');
     var slotIn = q('.slot-in'), slotOut = q('.slot-out'), slotG = q('.slot-guests');
-    var cal = q('.cal'), months = q('.cal-months'), step = q('.cal-step'), sum = q('.cal-sum');
+    var cal = q('.cal'), months = q('.cal-months'), step = q('.cal-step'), sum = q('.cal-sum'), note = q('.cal-note');
     var prev = q('.cal-prev'), next = q('.cal-next'), gPop = q('.guest-pop'), gList = q('.guest-list');
+    var sizeBtns = Array.prototype.slice.call(form.querySelectorAll('.size-switch button'));
     var start = readStay();
-    var S = { ci: start.ci >= TODAY ? start.ci : '', co: '', g: start.g || 0 }, mode = 'in', opener = null;
+    var S = { ci: start.ci >= TODAY ? start.ci : '', co: '', g: start.g || 0, b: start.b || parseInt(form.dataset.beds, 10) || 0, t: form.dataset.type || start.t || '' }, mode = 'in', opener = null;
+    var TT = typeOf(S.t), maxB = TT ? TT.maxBeds : 3;
+    if (S.b > maxB) S.b = maxB;
+    sizeBtns.forEach(function (b) { if (+b.dataset.b > maxB) b.hidden = true; });
     if (S.ci && start.co > S.ci) S.co = start.co;
     var maxGuests = parseInt(form.dataset.max, 10) || 6;
     if (S.g > maxGuests) S.g = 0;
     var now = new Date(), FIRST = new Date(now.getFullYear(), now.getMonth(), 1), view = FIRST;
     var nights = function () { return nightsOf(S); };
+    function limit() {  // first fully booked night after check-in: the latest possible check-out
+      if (!S.ci) return '';
+      for (var v = plusDays(S.ci, 1), k = 0; k < 120; v = plusDays(v, 1), k++) if (!nightOpen(S.b, v, S.t)) return v;
+      return '';
+    }
 
     function renderCal() {
-      var count = window.innerWidth < 700 ? 1 : 2, html = '';
+      var count = window.innerWidth < 700 ? 1 : 2, html = '', lim = mode === 'out' ? limit() : '';
       for (var k = 0; k < count; k++) {
         var m = new Date(view.getFullYear(), view.getMonth() + k, 1);
         html += '<div class="month"><p class="mname">' + MONTH[m.getMonth()] + ' ' + m.getFullYear() + '</p><div class="wk" aria-hidden="true"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div><div class="days">';
         var lead = (m.getDay() + 6) % 7, last = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate();
         for (var i = 0; i < lead; i++) html += '<span></span>';
         for (var d = 1; d <= last; d++) {
-          var v = iso(new Date(m.getFullYear(), m.getMonth(), d)), cls = 'day';
+          var v = iso(new Date(m.getFullYear(), m.getMonth(), d)), cls = 'day', open = v >= TODAY && nightOpen(S.b, v, S.t), off;
+          if (mode === 'out' && S.ci && v > S.ci) off = !!(lim && v > lim);
+          else off = v < TODAY || !open;
+          if (v >= TODAY && !open && !(mode === 'out' && v === lim)) cls += ' full';
           if (v === TODAY) cls += ' today';
           if (v === S.ci) cls += ' start';
           if (v === S.co) cls += ' end';
           if (S.ci && S.co && v > S.ci && v < S.co) cls += ' in';
-          html += '<button type="button" class="' + cls + '" data-v="' + v + '" aria-label="' + fmtYear(v) + '"' + (v < TODAY ? ' disabled' : '') + ' aria-pressed="' + (v === S.ci || v === S.co) + '">' + d + '</button>';
+          html += '<button type="button" class="' + cls + '" data-v="' + v + '" aria-label="' + fmtYear(v) + (cls.indexOf('full') > -1 ? ', booked' : '') + '"' + (off ? ' disabled' : '') + ' aria-pressed="' + (v === S.ci || v === S.co) + '">' + d + '</button>';
         }
         html += '</div></div>';
       }
@@ -241,7 +318,18 @@
       prev.disabled = view <= FIRST;
       step.textContent = mode === 'in' ? 'Choose your check-in date' : 'Now choose your check-out date';
       sum.innerHTML = S.ci ? '<b>' + fmt(S.ci) + '</b> – ' + (S.co ? '<b>' + fmt(S.co) + '</b> · ' + plural(nights(), 'night') : '…') : 'No dates yet';
+      sizeBtns.forEach(function (b) { b.setAttribute('aria-pressed', String(+b.dataset.b === S.b)); });
+      var what = (TT ? TT.name.toLowerCase() : 'residence') + (S.b ? ' with ' + bedWord(S.b) : '');
+      if (note) note.textContent = 'Struck-through nights have no ' + what + ' free.' + (S.b ? '' : ' Choose a number of bedrooms to see its dates.') + ' [Demo: sample availability.]';
     }
+    sizeBtns.forEach(function (b) {
+      b.addEventListener('click', function () {
+        S.b = S.b === +b.dataset.b ? 0 : +b.dataset.b;
+        if (S.ci && !nightOpen(S.b, S.ci, S.t)) { S.ci = ''; S.co = ''; mode = 'in'; }
+        else if (S.co) { var l = limit(); if (l && S.co > l) { S.co = ''; mode = 'out'; } }
+        renderCal(); sync();
+      });
+    });
     function paintPreview(hover) {
       months.querySelectorAll('.day').forEach(function (b) {
         var v = b.dataset.v, on = mode === 'out' && S.ci && !S.co && hover && hover > S.ci;
@@ -258,9 +346,10 @@
         renderCal(); b = months.querySelector('[data-v="' + v + '"]');
       }
       if (b && !b.disabled) b.focus();
+      else { var f = months.querySelector('.day:not(:disabled)'); if (f) f.focus(); }
     }
     function pick(v) {
-      if (mode === 'in' || !S.ci || v <= S.ci) { S.ci = v; S.co = ''; mode = 'out'; renderCal(); focusDay(v); }
+      if (mode === 'in' || !S.ci || v <= S.ci) { S.ci = v; S.co = ''; mode = 'out'; renderCal(); focusDay(plusDays(v, 1)); }
       else { S.co = v; mode = 'in'; renderCal(); setTimeout(function () { close(true); }, 280); }
       sync();
     }
@@ -345,7 +434,7 @@
       var ok = ready();
       btn.classList.toggle('ready', ok);
       if (ok) {
-        hint.innerHTML = '<b>' + fmt(S.ci) + ' – ' + fmt(S.co) + '</b> · ' + plural(nights(), 'night') + ' · ' + plural(S.g, 'guest');
+        hint.innerHTML = '<b>' + fmt(S.ci) + ' – ' + fmt(S.co) + '</b> · ' + plural(nights(), 'night') + ' · ' + plural(S.g, 'guest') + (S.b ? ' · ' + bedWord(S.b) : '');
       } else {
         var miss = [];
         if (!S.ci) miss.push('check-in date');
@@ -365,7 +454,7 @@
         return;
       }
       close(false);
-      var stay = { ci: S.ci, co: S.co, g: S.g, room: form.dataset.room || readStay().room };
+      var stay = { ci: S.ci, co: S.co, g: S.g, b: S.b, t: S.t };
       if (form.dataset.go) { location.href = form.dataset.go + '?' + stayQuery(stay); return; }
       history.replaceState(null, '', '?' + stayQuery(stay));
       document.dispatchEvent(new CustomEvent('jamari:stay', { detail: stay }));
@@ -374,66 +463,92 @@
   }
   document.querySelectorAll('form.booking').forEach(initBooking);
 
-  // ---------------------------------------------------------------- booking flow pages
+  // ---------------------------------------------------------------- booking flow pages (DEMO: no payment is taken)
   var page = document.body.dataset.page;
+  var HOLD_MS = 15 * 60000;
+  function clock(t) { var d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+  function sameStay(h, s) { return h && h.ci === s.ci && h.co === s.co && h.b === s.b && h.t === s.t; }
+  function newHold(s) { var h = { ci: s.ci, co: s.co, b: s.b, t: s.t, until: Date.now() + HOLD_MS }; store('jamari-hold', h); return h; }
+  function getHold(s) { var h = store('jamari-hold'); return sameStay(h, s) ? h : null; }
+  function holdText(c, h) { return 'Your ' + c.T.name.toLowerCase() + ' with ' + bedWord(c.z.beds) + ' is held for you for 15 minutes, until ' + clock(h.until) + '. Pay before then to keep it.'; }
 
-  function summaryHTML(stay, r) {
-    var n = nightsOf(stay), total = r.price ? naira(r.price * n) : '[Price to confirm]';
-    return '<img src="assets/img/' + r.photo + '.jpg" alt="">' +
-      '<div><span class="label">' + esc(r.type) + '</span><h2>' + esc(r.name) + '</h2></div>' +
+  function summaryHTML(stay, z, r, T) {
+    var n = nightsOf(stay);
+    return '<img src="assets/img/' + (r ? r.photo : T.photo) + '.jpg" alt="">' +
+      '<div><span class="label">' + (r ? bedWord(z.beds) + ' · your residence' : 'Your stay') + '</span><h2>' + (r ? esc(r.name) : esc(stayName(T, z.beds))) + '</h2></div>' +
       '<ul class="rows plain">' +
       '<li><span>Dates</span><span>' + fmt(stay.ci) + ' – ' + fmtYear(stay.co) + '</span></li>' +
       '<li><span>Nights</span><span>' + n + '</span></li>' +
       '<li><span>Guests</span><span>' + plural(stay.g, 'guest') + '</span></li>' +
-      '<li><span>Rate</span><span>' + (r.price ? naira(r.price) + ' × ' + plural(n, 'night') : '[₦—] per night') + '</span></li>' +
-      '</ul><div class="total"><span>Total</span><span>' + total + '</span></div>' +
-      '<p class="note">Paid securely through Paystack.</p>';
+      '<li><span>Bedrooms</span><span>' + z.beds + '</span></li>' +
+      '<li><span>Rate</span><span>' + naira(z.price) + ' × ' + plural(n, 'night') + '</span></li>' +
+      '<li><span>Check-in</span><span>From 2 pm</span></li><li><span>Check-out</span><span>By 12 pm</span></li>' +
+      '</ul><div class="total"><span>' + (r ? 'Paid' : 'Total') + '</span><span>' + naira(z.price * n) + '</span></div>' +
+      (r ? '' : '<p class="note">Your residence number is on your confirmation.' + (z.beds < T.maxBeds ? ' Bedrooms you don’t book stay locked.' : '') + '</p>') +
+      '<p class="note">Card, bank transfer or USSD, through Paystack. Charged in naira.</p>';
   }
   function missingHTML(text) {
     return '<div class="flow-missing"><p>' + text + '</p><a class="btn inline" href="book.html">Choose your dates</a></div>';
   }
-  function flowGuard() {
-    var stay = readStay(), r = findRes(stay.room);
-    if (!datesOk(stay) || !r) {
+  function flowGuard(r) {
+    var stay = readStay(), z = sizeOf(stay.b), T = typeOf(stay.t);
+    if (!datesOk(stay) || !z || !T || z.beds > T.maxBeds || stay.g > z.guests) {
       var main = document.querySelector('.flow-main'), side = document.querySelector('.summary');
-      if (main) main.innerHTML = missingHTML('Your booking details are missing or out of date. Start again with your dates and guests.');
+      if (main) main.innerHTML = missingHTML('Your booking details are missing or out of date. Start again with your dates, guests and residence.');
       if (side) side.hidden = true;
       return null;
     }
     document.querySelectorAll('.stepper a').forEach(function (a) { a.href = a.getAttribute('href').split('?')[0] + '?' + stayQuery(stay); });
     var side2 = document.querySelector('.summary');
-    if (side2) side2.innerHTML = summaryHTML(stay, r);
-    return { stay: stay, r: r };
+    if (side2) side2.innerHTML = summaryHTML(stay, z, r, T);
+    return { stay: stay, z: z, T: T };
   }
+  function showHold(c, h) { var el = document.getElementById('hold'); if (el) { el.textContent = holdText(c, h); el.hidden = false; } }
 
-  // step 1: dates and residence
+  // step 1: dates, residence type and bedrooms
   if (page === 'book') {
-    var list = document.getElementById('pick-list'), head = document.getElementById('pick-head');
+    var list = document.getElementById('pick-list'), head = document.getElementById('pick-head'), CH = {}, last = readStay();
     var renderPicks = function (stay) {
-      var ok = datesOk(stay), n = ok ? nightsOf(stay) : 0;
+      last = stay;
+      var ok = datesOk(stay), n = ok ? nightsOf(stay) : 0, need = stay.g ? needBeds(stay.g) : 1;
       head.innerHTML = ok
-        ? 'Residences for <b>' + fmt(stay.ci) + ' – ' + fmt(stay.co) + '</b> · ' + plural(n, 'night') + ' · ' + plural(stay.g, 'guest') + '. [Preview: every residence shows as free.]'
+        ? 'For <b>' + fmt(stay.ci) + ' – ' + fmt(stay.co) + '</b> · ' + plural(n, 'night') + ' · ' + plural(stay.g, 'guest') + '. Prices are per night.'
         : 'Choose your dates and guests above to see the price for your stay.';
-      list.innerHTML = RES.map(function (r) {
-        var fits = !stay.g || stay.g <= r.guests, sel = r.slug === stay.room;
-        var price = r.price ? (ok ? '<b>' + naira(r.price * n) + '</b><small>' + naira(r.price) + ' × ' + plural(n, 'night') + '</small>' : '<b>' + naira(r.price) + '</b><small>per night</small>') : '<b>[Price to confirm]</b>';
-        var act = !fits ? '<small>Sleeps up to ' + r.guests + '</small>'
-          : ok ? '<a class="btn" href="book-details.html?' + stayQuery({ ci: stay.ci, co: stay.co, g: stay.g, room: r.slug }) + '">' + (sel ? 'Continue' : 'Select') + '</a>'
-          : '<small>Pick dates first</small>';
-        return '<article class="pick' + (sel ? ' sel' : '') + (fits ? '' : ' off') + '">' +
-          '<img src="assets/img/' + r.photo + '.jpg" alt="" loading="lazy">' +
-          '<div><span class="label">' + esc(r.type) + (sel ? ' · your choice' : '') + '</span><h3>' + esc(r.name) + '</h3><span class="spec">' + esc(r.spec) + '</span></div>' +
-          '<div class="side">' + price + act + '</div></article>';
+      list.innerHTML = TYPES.map(function (T) {
+        var fits = need <= T.maxBeds;
+        var b = CH[T.slug] || (stay.t === T.slug && stay.b ? stay.b : (stay.b && stay.b <= T.maxBeds ? stay.b : T.maxBeds));
+        b = Math.min(Math.max(b, need), T.maxBeds); CH[T.slug] = b;
+        var z = sizeOf(b), sel = stay.t === T.slug, free = ok && fits ? assign(b, stay.ci, stay.co, T.slug) : null;
+        var beds = '';
+        for (var k = 1; k <= T.maxBeds; k++) beds += '<button type="button" data-t="' + T.slug + '" data-b="' + k + '" aria-pressed="' + (k === b) + '"' + (k < need ? ' disabled' : '') + ' aria-label="' + bedWord(k) + '">' + k + '</button>';
+        var price = ok ? '<b>' + naira(z.price * n) + '</b><small>' + naira(z.price) + ' × ' + plural(n, 'night') + '</small>' : '<b>' + naira(z.price) + '</b><small>per night</small>';
+        var q = stayQuery({ ci: stay.ci, co: stay.co, g: stay.g, b: b, t: T.slug });
+        var act = !fits ? '<small>Sleeps up to ' + sizeOf(T.maxBeds).guests + '</small>'
+          : !ok ? '<small>Pick dates first</small>'
+          : free ? '<a class="btn' + (sel ? '' : ' ghost') + '" data-hold="' + T.slug + '" href="book-details.html?' + q + '">Select</a>'
+          : '<span class="chip chip-cancelled">Not free for these dates</span><a class="see-dates" href="' + T.url + '?' + stayQuery({ g: stay.g, b: b }) + '#book">See free dates</a>';
+        return '<article class="pick' + (sel ? ' sel' : '') + (fits && (!ok || free) ? '' : ' off') + '">' +
+          '<img src="assets/img/' + T.photo + '.jpg" alt="" loading="lazy">' +
+          '<div><span class="label">Up to ' + sizeOf(T.maxBeds).guests + ' guests' + (sel ? ' · your choice' : '') + '</span><h3>' + esc(T.name) + '</h3><span class="spec">' + esc(T.where) + '</span>' +
+          (fits ? '<div class="bed-pick" role="group" aria-label="Bedrooms in the ' + esc(T.name.toLowerCase()) + '"><span class="label">Bedrooms</span>' + beds + '</div>' : '') + '</div>' +
+          '<div class="side">' + (ok && fits && !free ? '' : price) + act + '</div></article>';
       }).join('');
     };
+    list.addEventListener('click', function (e) {
+      var bb = e.target.closest('.bed-pick button');
+      if (bb) { CH[bb.dataset.t] = +bb.dataset.b; renderPicks(last); var f = list.querySelector('[data-t="' + bb.dataset.t + '"][data-b="' + bb.dataset.b + '"]'); if (f) f.focus(); return; }
+      var a = e.target.closest('[data-hold]'); if (!a) return;
+      var s = readStay(); s.t = a.dataset.hold; s.b = CH[s.t]; newHold(s);
+    });
     renderPicks(readStay());
-    document.addEventListener('jamari:stay', function (e) { renderPicks(e.detail); });
+    document.addEventListener('jamari:stay', function (e) { CH = {}; renderPicks(e.detail); });
   }
 
   // step 2: guest details
   if (page === 'book-details') {
     var ctx = flowGuard(), f2 = document.getElementById('details-form');
     if (ctx && f2) {
+      showHold(ctx, getHold(ctx.stay) || newHold(ctx.stay));
       var saved = store('jamari-guest') || {};
       Object.keys(saved).forEach(function (k) { var el = f2.elements[k]; if (el) { if (el.type === 'checkbox') el.checked = !!saved[k]; else { el.value = saved[k]; el.dispatchEvent(new Event('change')); } } });
       f2.querySelector('.back').href = 'book.html?' + stayQuery(ctx.stay);
@@ -456,48 +571,81 @@
     }
   }
 
-  // step 3: review and pay
+  // step 3: review and pay (demo payment window)
   if (page === 'book-pay') {
     var c3 = flowGuard(), g3 = store('jamari-guest');
     if (c3 && !g3) document.querySelector('.flow-main').innerHTML = missingHTML('We need your details before payment. Go back one step.');
     else if (c3) {
-      var n3 = nightsOf(c3.stay), q3 = stayQuery(c3.stay);
+      var n3 = nightsOf(c3.stay), q3 = stayQuery(c3.stay), total3 = naira(c3.z.price * n3);
+      var h3 = getHold(c3.stay) || newHold(c3.stay);
+      var noticeEl = document.getElementById('pay-notice'), holdEl = document.getElementById('hold');
+      var notice = function (title, text) { noticeEl.innerHTML = '<h2>' + title + '</h2><p>' + text + '</p>'; noticeEl.hidden = false; holdEl.hidden = true; noticeEl.scrollIntoView({ block: 'center' }); };
+      showHold(c3, h3);
       document.getElementById('review').innerHTML =
-        '<li><span>Residence</span><span>' + esc(c3.r.name) + ' · <a href="book.html?' + q3 + '">Change</a></span></li>' +
+        '<li><span>Residence</span><span>' + esc(stayName(c3.T, c3.z.beds)) + ' · <a href="book.html?' + q3 + '">Change</a></span></li>' +
+        '<li><span>Residence number</span><span>On your confirmation</span></li>' +
         '<li><span>Dates</span><span>' + fmt(c3.stay.ci) + ' – ' + fmtYear(c3.stay.co) + ' · ' + plural(n3, 'night') + ' · <a href="book.html?' + q3 + '">Change</a></span></li>' +
         '<li><span>Guests</span><span>' + plural(c3.stay.g, 'guest') + '</span></li>' +
-        '<li><span>Lead guest</span><span>' + esc(g3.name) + ' · ' + esc(g3.phone) + ' · <a href="book-details.html?' + q3 + '">Edit</a></span></li>';
+        '<li><span>Lead guest</span><span>' + esc(g3.name) + ' · ' + esc(g3.phone) + ' · <a href="book-details.html?' + q3 + '">Edit</a></span></li>' +
+        '<li><span>Check-in / out</span><span>From 2 pm / by 12 pm</span></li>';
       var payBtn = document.getElementById('pay-btn'), f3 = document.getElementById('pay-form');
-      payBtn.textContent = c3.r.price ? 'Pay ' + naira(c3.r.price * n3) + ' securely' : 'Send booking request';
+      payBtn.textContent = 'Pay ' + total3 + ' securely';
       f3.querySelector('.back').href = 'book-details.html?' + q3;
+      var modal = document.getElementById('pay-modal');
+      document.getElementById('pm-email').textContent = g3.email || '';
+      document.getElementById('pm-amount').textContent = 'Pay NGN ' + total3.slice(1);
+      document.getElementById('pm-pay').textContent = 'Pay NGN ' + total3.slice(1);
+      var closeModal = function () { modal.hidden = true; document.body.style.overflow = ''; };
       f3.addEventListener('submit', function (e) {
         e.preventDefault();
         var terms = document.getElementById('terms');
         terms.closest('.check').classList.toggle('err', !terms.checked);
         if (!terms.checked) { terms.focus(); return; }
-        var ref = 'JR-' + c3.stay.ci.slice(2, 4) + c3.stay.ci.slice(5, 7) + c3.stay.ci.slice(8, 10) + '-' + String(Math.floor(Math.random() * 900) + 100);
-        location.href = 'book-confirmed.html?' + q3 + '&ref=' + ref;
+        var h = getHold(c3.stay);
+        if (!h || h.until < Date.now()) {
+          notice('Your 15 minutes ran out.', 'We released your ' + c3.T.name.toLowerCase() + ' so others can book. Nothing was charged. ' +
+            (assign(c3.z.beds, c3.stay.ci, c3.stay.co, c3.T.slug) ? 'It is still free for these dates: press pay again to hold it for another 15 minutes.' : 'It has since been booked. <a href="book.html?' + q3 + '">Choose other dates</a>.'));
+          newHold(c3.stay); return;
+        }
+        modal.hidden = false; document.body.style.overflow = 'hidden'; document.getElementById('pm-pay').focus();
+      });
+      document.getElementById('pm-x').addEventListener('click', function () {
+        closeModal();
+        notice('Payment not completed.', 'Nothing was charged. Your ' + c3.T.name.toLowerCase() + ' is still held for you until ' + clock(getHold(c3.stay).until) + ', so you can try again or use another payment method.');
+        payBtn.textContent = 'Try paying again';
+      });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !modal.hidden) document.getElementById('pm-x').click(); });
+      document.getElementById('pm-pay').addEventListener('click', function () {
+        var r = assign(c3.z.beds, c3.stay.ci, c3.stay.co, c3.T.slug);
+        if (!r) { closeModal(); notice('Sorry, these dates just went.', 'The last ' + c3.T.name.toLowerCase() + ' was booked while you were paying. If any money left your account, Paystack refunds it in full. <a href="book.html?' + q3 + '">Choose other dates</a>.'); return; }
+        var ref = 'JR-' + String(Math.floor(Math.random() * 900000) + 100000);
+        store('jamari-hold', null);
+        location.href = 'book-confirmed.html?' + q3 + '&ref=' + ref + '&res=' + r.slug;
       });
     }
   }
 
-  // step 4: confirmed
+  // step 4: confirmed (paid)
   if (page === 'book-confirmed') {
-    var c4 = flowGuard(), g4 = store('jamari-guest') || {};
-    if (c4) {
-      var ref = new URLSearchParams(location.search).get('ref') || 'JR-preview';
+    var p4 = new URLSearchParams(location.search), r4 = findRes(p4.get('res') || '');
+    var c4 = flowGuard(r4), g4 = store('jamari-guest') || {};
+    if (c4 && r4) {
+      var ref = p4.get('ref') || 'JR-demo', paid4 = naira(c4.z.price * nightsOf(c4.stay));
+      var where = r4.name + (c4.z.beds < c4.T.maxBeds ? ', with ' + bedWord(c4.z.beds) + ' open for you (' + (c4.T.maxBeds - c4.z.beds === 1 ? 'the other bedroom stays' : 'the other bedrooms stay') + ' locked)' : '');
       document.getElementById('who').textContent = (g4.name || 'friend').split(' ')[0] + '.';
-      document.getElementById('ref').textContent = 'Booking ' + ref + ' · ' + c4.r.name + ' · ' + fmt(c4.stay.ci) + ' – ' + fmtYear(c4.stay.co);
-      document.getElementById('sent').textContent = 'Your booking reference is ' + ref + '. [Preview: nothing was booked or sent.]';
+      document.getElementById('ref').textContent = 'Paid ' + paid4 + ' · Booking ' + ref + ' · ' + r4.name;
+      document.getElementById('sent').textContent = 'Your booking is confirmed and paid. You’re in ' + where + '. We’ve emailed the details to ' + (g4.email || 'you') + ', and Paystack has sent your receipt. [Demo: no payment was taken and no email was sent.]';
       var ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Jamari Residences//Booking//EN', 'BEGIN:VEVENT',
         'UID:' + ref + '@jamariresidences.com', 'DTSTAMP:' + new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z',
         'DTSTART;VALUE=DATE:' + c4.stay.ci.replace(/-/g, ''), 'DTEND;VALUE=DATE:' + c4.stay.co.replace(/-/g, ''),
-        'SUMMARY:Stay at Jamari Residences · ' + c4.r.name, 'LOCATION:3a Jide Sawyerr Drive\\, Lekki Phase 1\\, Lagos',
-        'DESCRIPTION:Booking ' + ref + '. Check in from 3 pm. WhatsApp +234 704 820 0009.', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+        'SUMMARY:Stay at Jamari Residences · ' + r4.name, 'LOCATION:3a Jide Sawyerr Drive\\, Lekki Phase 1\\, Lagos',
+        'DESCRIPTION:Booking ' + ref + '. Check in from 2 pm\\, check out by 12 pm. WhatsApp +234 704 820 0009.', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
       var cal = document.getElementById('add-cal');
       cal.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }));
       cal.download = 'jamari-stay-' + ref + '.ics';
       document.getElementById('msg-team').href = WA + '?text=' + encodeURIComponent('Hello Jamari, this is ' + (g4.name || 'a guest') + '. My booking reference is ' + ref + '.');
+    } else if (c4) {
+      document.querySelector('.flow-main').innerHTML = missingHTML('We couldn’t find this booking. Start again with your dates.');
     }
   }
 })();
